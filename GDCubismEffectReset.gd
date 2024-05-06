@@ -1,4 +1,4 @@
-class_name GDCubismReset extends GDCubismEffectCustom
+class_name GDCubismCustomBlink extends GDCubismEffectCustom
 
 var ref_world: World = null
 

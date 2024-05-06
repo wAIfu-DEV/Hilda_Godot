@@ -62,12 +62,54 @@ const L2D_MOTION_SING: String = "Singing"
 const L2D_MOTION_NONO: String = "Nono"
 
 const L2D_ANIMATIONS: Dictionary = {
-    L2D_MOTION_IDLE: 0,
-    L2D_MOTION_TALKING: 0,
+    L2D_MOTION_IDLE: 1,
+    L2D_MOTION_TALKING: 1,
     L2D_MOTION_LISTENING: 0,
     L2D_MOTION_PUNCH: 0,
     L2D_MOTION_SING: 0,
     L2D_MOTION_NONO: 0,
+}
+
+const L2D_EXPR_COW = "Cow"
+const L2D_EXPR_ANGRY = "Angry"
+const L2D_EXPR_FURIOUS = "Furious"
+const L2D_EXPR_SAD = "Sad"
+const L2D_EXPR_BLUSHING = "Blushing"
+const L2D_EXPR_HAPPY = "Happy"
+
+const L2D_EXPRESSIONS: Dictionary = {
+    L2D_EXPR_COW: {
+        "CowToggle": 1.0
+    },
+    L2D_EXPR_FURIOUS: {
+        "ParamEyeLOpen": 0.4,
+        "ParamEyeROpen": 0.4,
+        "ParamEyeLSmile": 0.15,
+        "ParamEyeRSmile": 0.15,
+        "ParamMouthForm": -1.0,
+        "angry": 1.0
+    },
+    L2D_EXPR_ANGRY: {
+        "ParamEyeLOpen": 0.55,
+        "ParamEyeROpen": 0.55,
+        "ParamEyeLSmile": 0.2,
+        "ParamEyeRSmile": 0.2,
+        "ParamMouthForm": -0.55,
+        "angry": 0.5
+    },
+    L2D_EXPR_BLUSHING: {
+        "blushing": 1.0
+    },
+    L2D_EXPR_HAPPY: {
+        "ParamEyeLSmile": 0.75,
+        "ParamEyeRSmile": 0.75,
+        "ParamEyeLOpen": 0.8,
+        "ParamEyeROpen": 0.8,
+    },
+    L2D_EXPR_SAD: {
+        "crying": 1.0,
+        "ParamMouthForm": -0.25
+    }
 }
 
 
@@ -90,7 +132,8 @@ const L2D_ANIMATIONS: Dictionary = {
 @onready var ref_nukescene: NukeScene = $"NukeScene"
 @onready var ref_live2d: GDCubismUserModel = $"HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel"
 @onready var ref_live2d_lipsync: GDCubismLipSync = $"HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel/GDCubismEffectCustom"
-@onready var ref_live2d_reset: GDCubismReset = $"HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel/GDCubismEffectCustom2"
+@onready var ref_live2d_reset: GDCubismCustomBlink = $"HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel/GDCubismEffectCustom2"
+@onready var ref_live2d_toggles: GDCubismCustomToggle = $HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel/GDCubismEffectCustom3
 @onready var ref_fpscounter: Label = $"HUD/CanvasLayer/FpsCounter"
 @onready var ref_popup: Control = $"HUD/CanvasLayer/Popup"
 @onready var ref_backgroundsing = $"Props/BackGroundSing"
@@ -105,10 +148,14 @@ var current_user: String = "w-AI-fu_DEV"
 var spawned_objects: Array[Node3D] = []
 var scene_change_cooldown: float = 0.0
 var current_l2d_anime: String = ""
+var last_l2d_variant: int = 999
 var fps_counter_refresh_cooldown: float = 0.0
 
 var randoms_array: Array[float] = []
 var random_index: int = RANDOMS_ARRAY_AMOUNT
+
+var temporary_l2d_expr: Array[String] = []
+var persistent_l2d_expr: Array[String] = []
 
 var global_script_vars: Dictionary = {
     "PREVSCENE": "",
@@ -130,6 +177,8 @@ func _ready()-> void:
     setCurrentScene(SCENE_INIT)
     ref_live2d.assets = "res://Live2DHilda/HildaV.model3.json"
     setLive2dAnimationLoop(L2D_MOTION_IDLE)
+    setLive2dExpr(L2D_EXPR_COW)
+    setLive2dExpr(L2D_EXPR_HAPPY)
     hideLive2dModel()
     if (!flag_display_chat): hideTwitchChat()
 
@@ -447,17 +496,44 @@ func _initRandomsArray(array: Array[float])-> void:
 
 func setLive2dAnimationLoop(animation: String)-> void:
     current_l2d_anime = animation
-    var variants = L2D_ANIMATIONS[animation]
-    var rdm_variant = randi_range(0, variants)
-    ref_live2d.start_motion_loop(animation, rdm_variant, GDCubismUserModel.PRIORITY_FORCE, true, true)
+    var rdm_variant: int = getNextRandomVariant(animation)
+    ref_live2d.start_motion(animation, rdm_variant, GDCubismUserModel.PRIORITY_FORCE)
+
+    for connection in ref_live2d.motion_finished.get_connections():
+        ref_live2d.motion_finished.disconnect(connection["callable"])
+    ref_live2d.motion_finished.connect(setLive2dAnimationLoop.bind(current_l2d_anime))
 
 
 func setLive2DAnimationTemp(animation: String)-> void:
-    var variants = L2D_ANIMATIONS[animation]
-    var rdm_variant = randi_range(0, variants)
+    var rdm_variant: int = getNextRandomVariant(animation)
     ref_live2d.start_motion(animation, rdm_variant, GDCubismUserModel.PRIORITY_FORCE)
     await ref_live2d.motion_finished
     setLive2dAnimationLoop(current_l2d_anime)
+
+
+func setLive2dExpr(expr: String)-> void:
+    ref_live2d_toggles.setToggle(expr)
+
+
+func unsetLive2dExpr(expr: String)-> void:
+    ref_live2d_toggles.unToggle(expr)
+
+
+func setTemporaryLive2dExprs(exprs: Array[String])-> void:
+    for expr in temporary_l2d_expr:
+        unsetLive2dExpr(expr)
+    for expr in exprs:
+        setLive2dExpr(expr)
+
+
+func getNextRandomVariant(animation: String)-> int:
+    print("ANIM:", animation)
+    var variants = L2D_ANIMATIONS[animation]
+    var rdm_variant = roundi(_randf() * variants)
+    while variants > 0 and rdm_variant == last_l2d_variant:
+        rdm_variant = roundi(_randf() * variants)
+    last_l2d_variant = rdm_variant
+    return rdm_variant
 
 
 func displayLive2dModel()-> void:

@@ -56,9 +56,11 @@ func resizeFont()-> void:
             if child is Label:
                 child.set("theme_override_font_sizes/font_size", current_font_size)
             if child is TextureRect:
-                child.custom_minimum_size.x = current_font_size
+                var texture = child.texture
+                var ratio = float(texture.get_width()) / float(texture.get_height())
+                child.custom_minimum_size.x = current_font_size * ratio
                 child.custom_minimum_size.y = current_font_size
-                child.size.x = current_font_size
+                child.size.x = current_font_size * ratio
                 child.size.y = current_font_size
         await  get_tree().process_frame
 
