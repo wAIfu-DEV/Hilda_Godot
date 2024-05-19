@@ -17,6 +17,7 @@ func _on_cubism_process(_model: GDCubismUserModel, _delta: float)-> void:
 
 
 func setToggle(toggle_name: String)-> void:
+    if not ref_world.L2D_EXPRESSIONS.has(toggle_name): return
     var toggle_dict: Dictionary = ref_world.L2D_EXPRESSIONS[toggle_name]
     for key in toggle_dict.keys():
         if not params.has(key):
@@ -29,6 +30,7 @@ func setToggle(toggle_name: String)-> void:
                 params[key]["param"] = param
 
 func unToggle(toggle_name: String)-> void:
+    if not ref_world.L2D_EXPRESSIONS.has(toggle_name): return
     var toggle_dict: Dictionary = ref_world.L2D_EXPRESSIONS[toggle_name]
     var to_erase = []
     for key in toggle_dict.keys():

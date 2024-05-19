@@ -29,7 +29,7 @@ const SCENE_CONCERT: String = "Concert"
 var ScenesDict: Dictionary = {
     SCENE_INIT: Scene.new(SCENE_INIT, "Hilda", "TVSceneCamera"),
     SCENE_START: Scene.new(SCENE_START, "StartingScreenHilda", "StartingScreenCamera"),
-    SCENE_ORTHO: Scene.new(SCENE_ORTHO, "HildaOrthoCam", "OrthogonalCamera"),
+    SCENE_ORTHO: Scene.new(SCENE_ORTHO, "HildaOrthoCam", "OrthogonalCamera2"),
     SCENE_NONE: Scene.new(SCENE_NONE, "Hilda", ""),
     SCENE_TRACKING: Scene.new(SCENE_TRACKING, "Hilda", "TrackingCamera1"),
     SCENE_REACT: Scene.new(SCENE_REACT, "HildaReact", "ReactCamera"),
@@ -70,14 +70,19 @@ const L2D_ANIMATIONS: Dictionary = {
     L2D_MOTION_NONO: 0,
 }
 
+const L2D_EXPR_NEUTRAL = "Neutral"
 const L2D_EXPR_COW = "Cow"
 const L2D_EXPR_ANGRY = "Angry"
 const L2D_EXPR_FURIOUS = "Furious"
 const L2D_EXPR_SAD = "Sad"
 const L2D_EXPR_BLUSHING = "Blushing"
 const L2D_EXPR_HAPPY = "Happy"
+const L2D_EXPR_DISTURBED = "Disturbed"
+const L2D_EXPR_SCARED = "Scared"
+const L2D_EXPR_SMUG = "Smug"
 
 const L2D_EXPRESSIONS: Dictionary = {
+    L2D_EXPR_NEUTRAL : {},
     L2D_EXPR_COW: {
         "CowToggle": 1.0
     },
@@ -109,6 +114,22 @@ const L2D_EXPRESSIONS: Dictionary = {
     L2D_EXPR_SAD: {
         "crying": 1.0,
         "ParamMouthForm": -0.25
+    },
+    L2D_EXPR_DISTURBED: {
+        "eyesize": 0.65,
+        "ParamEyeLSmile": 0.75,
+        "ParamEyeRSmile": 0.75,
+    },
+    L2D_EXPR_SCARED: {
+        "eyesize": 0.85,
+        "ParamEyeLSmile": 1.0,
+        "ParamEyeRSmile": 1.0,
+        "ParamMouthForm": -0.25,
+    },
+    L2D_EXPR_SMUG: {
+        "ParamEyeLOpen": 0.35,
+        "ParamEyeROpen": 0.35,
+        "ParamMouthForm": 0.65,
     }
 }
 
@@ -136,7 +157,7 @@ const L2D_EXPRESSIONS: Dictionary = {
 @onready var ref_live2d_toggles: GDCubismCustomToggle = $HUD/CanvasLayer/Simple/Sprite2D/GDCubismUserModel/GDCubismEffectCustom3
 @onready var ref_fpscounter: Label = $"HUD/CanvasLayer/FpsCounter"
 @onready var ref_popup: Control = $"HUD/CanvasLayer/Popup"
-@onready var ref_backgroundsing = $"Props/BackGroundSing"
+@onready var ref_backgroundsing = $"HUD/CanvasLayer/SpectrogramVizu"
 
 
 # VARS -------------------------------------------------------------------------
@@ -154,6 +175,8 @@ var fps_counter_refresh_cooldown: float = 0.0
 var randoms_array: Array[float] = []
 var random_index: int = RANDOMS_ARRAY_AMOUNT
 
+var cow_redeem_cooldown: float = 0.0
+var threed_redeem_cooldown: float = 0.0
 var temporary_l2d_expr: Array[String] = []
 var persistent_l2d_expr: Array[String] = []
 
@@ -177,8 +200,6 @@ func _ready()-> void:
     setCurrentScene(SCENE_INIT)
     ref_live2d.assets = "res://Live2DHilda/HildaV.model3.json"
     setLive2dAnimationLoop(L2D_MOTION_IDLE)
-    setLive2dExpr(L2D_EXPR_COW)
-    setLive2dExpr(L2D_EXPR_HAPPY)
     hideLive2dModel()
     if (!flag_display_chat): hideTwitchChat()
 
@@ -202,6 +223,17 @@ func _process(delta: float)-> void:
     if fps_counter_refresh_cooldown > 1.0:
         fps_counter_refresh_cooldown = 0.0
         _setFpsCounter()
+
+    if cow_redeem_cooldown > 0.0:
+        cow_redeem_cooldown -= delta
+        if cow_redeem_cooldown <= 0.0:
+            unsetLive2dExpr(L2D_EXPR_COW)
+
+    if threed_redeem_cooldown > 0.0:
+        threed_redeem_cooldown -= delta
+        if threed_redeem_cooldown <= 0.0:
+            displayLive2dModel()
+            current_hilda.visible = false
 
     if Input.is_action_just_pressed("scene_01"):
         print("WORLD::SCENE: START")
@@ -394,11 +426,24 @@ func setFinishedSpeaking()-> void:
     current_speak_id = ""
 
 
+func validateMp3(bytes: PackedByteArray) -> bool:
+    var header: String = bytes.get_string_from_ascii().substr(0, 3)
+    if header == "ID3":
+        return true
+    if bytes.size() > 2 and (bytes[0] == 0xFF and (bytes[1] & 0xE0) == 0xE0):
+        return true
+    return false
+
+
 func loadAudioStream(path: String, wav_mix_rate: int = 40000, wav_stereo: bool = false)-> AudioStream:
+    if !FileAccess.file_exists(path):
+        printerr("VOICE::ERR: File does not exist: ", path)
+        return null
+
     var bytes: PackedByteArray = FileAccess.get_file_as_bytes(path)
-    if !bytes.size():
-        printerr("VOICE::ERR: Could not open voice file: ", path)
-        return
+    if bytes.size() == 0:
+        printerr("VOICE::ERR: Could not open voice file or file is empty: ", path)
+        return null
 
     var audio: AudioStream
     if path.ends_with(".wav"):
@@ -408,9 +453,13 @@ func loadAudioStream(path: String, wav_mix_rate: int = 40000, wav_stereo: bool =
         audio.format = AudioStreamWAV.FORMAT_16_BITS
         audio.stereo = wav_stereo
     elif path.ends_with(".mp3"):
+        if !validateMp3(bytes):
+            printerr("VOICE::ERR: Invalid MP3 file: ", path)
+            return null
         audio = AudioStreamMP3.new()
         audio.data = bytes
     else:
+        printerr("VOICE::ERR: Unsupported audio format: ", path)
         return null
     return audio
 
@@ -522,7 +571,9 @@ func unsetLive2dExpr(expr: String)-> void:
 func setTemporaryLive2dExprs(exprs: Array[String])-> void:
     for expr in temporary_l2d_expr:
         unsetLive2dExpr(expr)
+    temporary_l2d_expr.clear()
     for expr in exprs:
+        temporary_l2d_expr.append(expr)
         setLive2dExpr(expr)
 
 
@@ -556,6 +607,7 @@ func displayTwitchChat()-> void:
     ref_twitchchat.visible = true
     $"HUD/CanvasLayer/TwitchChatBG1".visible = true
     $"HUD/CanvasLayer/TwitchChatBG2".visible = true
+    $"HUD/CanvasLayer/TwitchChatBG3".visible = true
     $"HUD/CanvasLayer/StatusBar".visible = true
     $"HUD/CanvasLayer/Label".visible = true
     $"HUD/CanvasLayer/TextureRect".visible = true
@@ -565,6 +617,7 @@ func hideTwitchChat()-> void:
     ref_twitchchat.visible = false
     $"HUD/CanvasLayer/TwitchChatBG1".visible = false
     $"HUD/CanvasLayer/TwitchChatBG2".visible = false
+    $"HUD/CanvasLayer/TwitchChatBG3".visible = false
     $"HUD/CanvasLayer/StatusBar".visible = false
     $"HUD/CanvasLayer/Label".visible = false
     $"HUD/CanvasLayer/TextureRect".visible = false

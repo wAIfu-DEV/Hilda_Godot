@@ -4,6 +4,8 @@ const SCROLL_SPEED: int = 800
 const MAX_DISPLAYED_MSGS: int = 10
 const RANDOMS_ARRAY_AMOUNT: int = 64
 
+const current_font_size = 35.0
+
 var displayed_msgs_amount: int = 0
 var randoms_array: Array[float] = []
 var random_index: int = RANDOMS_ARRAY_AMOUNT
@@ -82,11 +84,16 @@ func populateChatMessageContent(content: String, chatnode: VBoxContainer)-> void
                 emote_texture = await em.asyncFetchEmote(sanitized)
             if !is_instance_valid(emote): continue
             emote.texture = emote_texture
+            var ratio = float(emote_texture.get_width()) / float(emote_texture.get_height())
+            emote.custom_minimum_size.x = current_font_size * ratio
+            emote.custom_minimum_size.y = current_font_size
+            emote.size.x = current_font_size * ratio
+            emote.size.y = current_font_size
             emote.visible = true
             continue
         if !is_instance_valid(chatnode): return
         var tword: Label = ref_tempword.duplicate() as Label
         tword.text = "%s " % word
-        tword.visible_characters = 26
+        tword.visible_characters = 24
         tword.visible = true
         ref_wrapcont.add_child(tword)

@@ -15,6 +15,7 @@ const PACKET_PREF_SING: String = "g"
 const PACKET_PREF_REDEEM: String = "r"
 const PACKET_PREF_USER: String = "u"
 const PACKET_PREF_INFO: String = "k"
+const PACKET_PREF_EMOTION: String = "e"
 
 
 # VARS -------------------------------------------------------------------------
@@ -110,12 +111,27 @@ func _handlePacket(packet: PackedByteArray)-> void:
                     ref_world.ref_nukescene.start()
                 "bald":
                     ref_world.current_hilda.goBald()
+                "moo":
+                    ref_world.cow_redeem_cooldown = 60.0
+                    ref_world.setLive2dExpr(ref_world.L2D_EXPR_COW)
+                "3D":
+                    if ref_world.current_scene.scene_name != ref_world.SCENE_ORTHO: return
+                    ref_world.threed_redeem_cooldown = 60.0
+                    ref_world.current_hilda.visible = true
+                    ref_world.hideLive2dModel()
         PACKET_PREF_USER:
             #print("WS::USER: %s" % split_payload[1])
             ref_world.current_user = split_payload[1]
         PACKET_PREF_INFO:
             print("WS::INFO: %s" % split_payload[1])
             ref_world.displayStatusMessage(split_payload[1])
+        PACKET_PREF_EMOTION:
+            var emotes: Array[String] = []
+            var emotions = Array(split_payload.slice(1))
+            print("WS::EMOTES: %s" % ",".join(emotions))
+            for e in emotions:
+                emotes.append(e)
+            ref_world.setTemporaryLive2dExprs(emotes)
         _:
             printerr("Received incorrect packet from w-AI-fu: ", prefix)
 

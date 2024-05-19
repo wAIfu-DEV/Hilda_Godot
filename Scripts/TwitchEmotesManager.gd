@@ -1,6 +1,10 @@
 class_name TwitchEmotesManager extends Node
 
 const FFMPEG = "C:\\ffmpeg\\ffmpeg.exe"
+const FFPROBE = "C:\\ffmpeg\\ffprobe.exe"
+
+const FRAMERATE = 24
+const FRAME_TIME_SEC = 1.0 / 24.0
 
 class AnimatedTextureWorker:
     signal done
@@ -20,6 +24,8 @@ var emotes: Dictionary = {}
 var cached_emotes: Dictionary = {}
 
 var awaiting_caching: Dictionary = {}
+
+var fps_regex: RegEx = RegEx.create_from_string("\\d+\\.\\d+(?= fps)")
 
 func _ready():
     print("EMOTES::FETCHING")
@@ -54,6 +60,7 @@ func _7tvEmotesRequestCompleted(_result: int, _response_code: int, _headers: Pac
     print("EMOTES::FETCHED")
     var emote_set: Array = json["emote_set"]["emotes"]
     for emote in emote_set:
+        #print(emote["name"])
         emotes[emote["name"].to_lower()] = emote
 
 
@@ -70,6 +77,21 @@ func getEmoteIfCached(emote_name: String)-> Texture2D:
     return cached_emotes[emote_name]
 
 
+func _getFrameTimings(ffprobe_out: String, output_arr: Array):
+    var lines = ffprobe_out.split("\n")
+    var prev_time = -0.05
+    for line in lines:
+        print("LINE:", line)
+        if line.begins_with("frame,"):
+            print("GOT LINE:", line)
+            var time_str = line.split(",")[1]
+            var time = time_str.to_float()
+            var duration = time - prev_time
+            output_arr.append(duration)
+            print("APPENDED:", duration)
+            prev_time = time
+
+
 func _animatedTextureWorkerFunc(worker: AnimatedTextureWorker)-> void:
     # TODO: Check if frames already present in folder
     var err = DirAccess.make_dir_recursive_absolute(worker.dir)
@@ -81,11 +103,15 @@ func _animatedTextureWorkerFunc(worker: AnimatedTextureWorker)-> void:
     var f = FileAccess.open(worker.dir + "\\img.gif", FileAccess.WRITE)
     f.store_buffer(worker.data)
     f.close()
-    OS.execute(FFMPEG, ["-i", worker.dir + "\\img.gif", worker.dir + "\\%04d.png"])
-    DirAccess.remove_absolute(worker.dir + "\\img.gif")
+    OS.execute(FFMPEG, ["-i", worker.dir + "\\img.gif", "-vf", "fps=" + String.num_int64(FRAMERATE), worker.dir + "\\%04d.png"])
+    #var stdout = []
+    #OS.execute(FFPROBE, ["-select_streams", "v:0", "-show_entries", "frame=coded_picture_number,pkt_pts_time,pkt_dts_time", "-of", "csv", worker.dir + "\\img.gif"], stdout, true)
+    #var frame_times = []
+    #_getFrameTimings(stdout[0], frame_times)
     var files = DirAccess.get_files_at(worker.dir)
     var animated_texture = AnimatedTexture.new()
     for filename in files:
+        if filename == "img.gif": continue
         var idx: int = int(filename.replace(".png", ""))
         if idx > 255: continue
         var img_data: PackedByteArray = FileAccess.get_file_as_bytes(worker.dir + "\\" + filename)
@@ -94,7 +120,7 @@ func _animatedTextureWorkerFunc(worker: AnimatedTextureWorker)-> void:
         var texture: ImageTexture = ImageTexture.create_from_image(image)
         animated_texture.frames = idx
         animated_texture.set_frame_texture(idx - 1, texture)
-        animated_texture.set_frame_duration(idx - 1, 0.05)
+        animated_texture.set_frame_duration(idx - 1, FRAME_TIME_SEC)
     worker.result = animated_texture
     worker.is_done = true
 
@@ -183,6 +209,7 @@ func _gifCacheRetreiveWorker(worker: AnimatedTextureWorker)-> void:
     var animated_texture = AnimatedTexture.new()
 
     for filename in files:
+        if filename == "img.gif": continue
         var idx: int = int(filename.replace(".png", ""))
         if idx > 255: continue
         var img_data: PackedByteArray = FileAccess.get_file_as_bytes(worker.dir + "\\" + filename)
@@ -191,7 +218,7 @@ func _gifCacheRetreiveWorker(worker: AnimatedTextureWorker)-> void:
         var texture: ImageTexture = ImageTexture.create_from_image(image)
         animated_texture.frames = idx
         animated_texture.set_frame_texture(idx - 1, texture)
-        animated_texture.set_frame_duration(idx - 1, 0.05)
+        animated_texture.set_frame_duration(idx - 1, FRAME_TIME_SEC)
 
     worker.result = animated_texture
     worker.is_done = true
@@ -248,7 +275,7 @@ func asyncFetchEmote(emote_name: String)-> Texture2D:
     var http_request: HTTPRequest = HTTPRequest.new()
     add_child(http_request)
 
-    var url: String = "https://cdn.7tv.app/emote/%s/1x%s" % [id, ".gif" if is_gif else ".png"]
+    var url: String = "https://cdn.7tv.app/emote/%s/2x%s" % [id, ".gif" if is_gif else ".png"]
 
     var error = http_request.request(url)
     if error != OK:

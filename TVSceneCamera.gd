@@ -18,7 +18,7 @@ func _ready() -> void:
 
 func exit()-> void:
     started = false
-    ref_world.setCurrentScene(ref_world.SCENE_START)
+    ref_world.setCurrentScene(ref_world.SCENE_ORTHO)
     ref_world.ref_hud2D.visible = true
 
 
