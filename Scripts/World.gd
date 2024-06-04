@@ -158,6 +158,7 @@ const L2D_EXPRESSIONS: Dictionary = {
 @onready var ref_fpscounter: Label = $"HUD/CanvasLayer/FpsCounter"
 @onready var ref_popup: Control = $"HUD/CanvasLayer/Popup"
 @onready var ref_backgroundsing = $"HUD/CanvasLayer/SpectrogramVizu"
+@onready var ref_spinningwheel = $"HUD/CanvasLayer/SpinningWheel"
 
 
 # VARS -------------------------------------------------------------------------
@@ -191,6 +192,7 @@ var cached_sound_effects: Dictionary = {
     "Blank": loadAudioStream("res://Audio/blank.mp3"),
 }
 
+var timestamp: int = 0
 
 # CODE -------------------------------------------------------------------------
 func _ready()-> void:
@@ -205,12 +207,19 @@ func _ready()-> void:
 
 
 func _process(delta: float)-> void:
+    timestamp = Time.get_unix_time_from_system()
+
     if _isFinishedPlayingPadded(VOICE_PADDING_END) && current_speak_id.length():
         if current_l2d_anime == L2D_MOTION_SING:
             ref_backgroundsing.visible = false
             setLive2dAnimationLoop(L2D_MOTION_IDLE)
         stopAudioStreams()
         setFinishedSpeaking()
+
+    if current_speak_id.length() && ref_voiceplayer.playing && ref_narratorplayer.playing:
+        handleSongDesync()
+
+    ref_spinningwheel.rotation_degrees += delta * 25.0
 
     if flag_auto_scene_switching:
         scene_change_cooldown += delta
@@ -640,3 +649,21 @@ func displayPopup(text: String, font_size: int, display_time: float, callback: C
     timer.queue_free()
     ref_popup.visible = false
     callback.call()
+
+
+func handleSongDesync()-> void:
+    const THRESH = 0.05
+    # Get the current playback positions
+    var pos1 = ref_voiceplayer.get_playback_position()
+    var pos2 = ref_narratorplayer.get_playback_position()
+
+    # Calculate the difference
+    var desync = abs(pos1 - pos2)
+
+    # If desynchronized beyond the threshold, correct it
+    if desync > THRESH:
+        # Adjust the playback position of the lagging player
+        if pos1 > pos2:
+            ref_narratorplayer.seek(pos1)
+        else:
+            ref_voiceplayer.seek(pos2)

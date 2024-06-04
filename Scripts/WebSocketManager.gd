@@ -73,7 +73,7 @@ func _handlePacket(packet: PackedByteArray)-> void:
             var song_name: String = songname_regex.sub(voc_path, "", true)\
                                                 .replacen("_", " ")\
                                                 .to_upper()
-            await  ref_world.displayPopup(song_name, 74, 1.5, func(): pass)
+            await ref_world.displayPopup(song_name, 74, 1.5, func(): pass)
             ref_world.ref_backgroundsing.visible = true
             ref_world.setLive2dAnimationLoop(ref_world.L2D_MOTION_SING)
             ref_world.setSong(id, voc_path, inst_path)

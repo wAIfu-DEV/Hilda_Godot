@@ -667,7 +667,7 @@ func spawnObject()-> void:
     ref_world.addSpawnedObject(throw_obj)
     throw_obj.global_position = spawn_pos
 
-    throw_obj.body_entered.connect(_throwObjectCollide)
+    throw_obj.body_entered.connect(_throwObjectCollide.bind(ref_world.timestamp))
 
     throw_obj.freeze = false
     throw_obj.visible = true
@@ -691,12 +691,10 @@ func spawnMultipleObjects(amount: int)-> void:
         await get_tree().process_frame
 
 
-func _throwObjectCollide(body: Node)-> void:
+func _throwObjectCollide(body: Node, spawn_time: int)-> void:
     if body.is_in_group("hildacollision"):
-        var collided = body.get("has_coll")
-        if collided: return
+        if ref_world.timestamp - spawn_time > 2: return
         ref_world.setSoundEffect("HitMarker")
-    body.set("has_coll", true)
 
 
 func _pickRdmIndex(list: Array)-> int:
