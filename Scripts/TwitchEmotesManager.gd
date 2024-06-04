@@ -104,10 +104,6 @@ func _animatedTextureWorkerFunc(worker: AnimatedTextureWorker)-> void:
     f.store_buffer(worker.data)
     f.close()
     OS.execute(FFMPEG, ["-i", worker.dir + "\\img.gif", "-vf", "fps=" + String.num_int64(FRAMERATE), worker.dir + "\\%04d.png"])
-    #var stdout = []
-    #OS.execute(FFPROBE, ["-select_streams", "v:0", "-show_entries", "frame=coded_picture_number,pkt_pts_time,pkt_dts_time", "-of", "csv", worker.dir + "\\img.gif"], stdout, true)
-    #var frame_times = []
-    #_getFrameTimings(stdout[0], frame_times)
     var files = DirAccess.get_files_at(worker.dir)
     var animated_texture = AnimatedTexture.new()
     for filename in files:
